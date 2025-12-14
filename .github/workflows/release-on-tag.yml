@@ -13,6 +13,35 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          lfs: true  # Esto descarga los archivos reales de Git LFS
+
+      - name: Setup Git LFS
+        uses: git-lfs/setup-git-lfs@v1
+        with:
+          version: latest
+
+      - name: Pull Git LFS files
+        run: git lfs pull
+
+      - name: Verify LFS files downloaded
+        run: |
+          echo "Verificando que los archivos .jar son reales (no punteros)..."
+          # Verifica que al menos un archivo .jar tiene más de 1KB (los punteros son ~130 bytes)
+          FIRST_JAR=$(find mods -name "*.jar" | head -1)
+          if [ -f "$FIRST_JAR" ]; then
+            SIZE=$(stat -c%s "$FIRST_JAR" 2>/dev/null || stat -f%z "$FIRST_JAR" 2>/dev/null)
+            if [ "$SIZE" -lt 1000 ]; then
+              echo "ERROR: Los archivos parecen ser punteros, no archivos reales"
+              echo "Tamaño del archivo: $SIZE bytes (debería ser > 1000 bytes)"
+              exit 1
+            fi
+            echo "✓ Archivo verificado: $FIRST_JAR ($SIZE bytes)"
+            echo "✓ Total de archivos .jar encontrados: $(find mods -name '*.jar' | wc -l)"
+          else
+            echo "ERROR: No se encontraron archivos .jar en el directorio mods/"
+            exit 1
+          fi
 
       - name: Prepare variables
         id: meta
@@ -31,15 +60,16 @@ jobs:
           ls -lh "${{ steps.meta.outputs.zip_name }}"
 
       - name: Upload zip to the existing Release
-        uses: actions/upload-release-asset@v1
-        with:
-          # github.event.release.upload_url contiene la URL de la release existente
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./${{ steps.meta.outputs.zip_name }}
-          asset_name: ${{ steps.meta.outputs.zip_name }}
-          asset_content_type: application/zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ZIP_FILE="${{ steps.meta.outputs.zip_name }}"
+          UPLOAD_URL="${{ github.event.release.upload_url }}"
+          
+          # Sube el archivo zip a la release
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/zip" \
+            --data-binary "@${ZIP_FILE}" \
+            "${UPLOAD_URL}?name=${ZIP_FILE}"
 
       - name: Print download URL
         run: |
