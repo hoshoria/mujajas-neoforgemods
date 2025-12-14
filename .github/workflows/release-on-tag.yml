@@ -16,11 +16,6 @@ jobs:
         with:
           lfs: true  # Esto descarga los archivos reales de Git LFS
 
-      - name: Setup Git LFS
-        uses: git-lfs/setup-git-lfs@v1
-        with:
-          version: latest
-
       - name: Pull Git LFS files
         run: git lfs pull
 
